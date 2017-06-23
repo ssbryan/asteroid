@@ -1,0 +1,3 @@
+Options: momtol = 2e-2, dvnormtol = 2e-2, runs = 100, tstep = 1.0, minvforcheck = 0.01
+0.0 -7.0 0.0 1.0  0.1 0.0 1.0e6
+0.0  7.0 0.0 1.0 -0.1 0.0 1.0e5
