@@ -14,7 +14,7 @@ int main(int argc, char* argv[])
     {
         fname = argv[1];
 
-        if (!fname.compare("-?") || fname.compare("/?") || fname.compare("-help") || fname.compare("/help"))
+        if (!fname.compare("-?") || !fname.compare("/?") || !fname.compare("-help") || !fname.compare("/help"))
         {
             printf("Usage:  asteroid [filename]\n");
             printf("\tFile format:\n");
