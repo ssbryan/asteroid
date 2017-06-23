@@ -1,0 +1,8 @@
+
+x64/Debug/**
+x64/Release/**
+*.pos
+*.db
+*.opendb
+.vs/asteroid/v14/.suo
+*.log

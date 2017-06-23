@@ -3,6 +3,7 @@
 #include <fstream>
 #include <math.h>
 #include <set>
+#include <ctime>
 #include <assert.h>
 
 // Author Stephen Bryan
@@ -29,6 +30,22 @@ ObjectMgr::ObjectMgr(const std::string& fname)
 
 bool ObjectMgr::Initialize(const std::string& fname)
 {
+    time(&mStartTime);
+    const char* fstr = fname.c_str();
+    std::string logExt(".log");
+
+    if (*(fstr + strlen(fstr) - 1) == '.')
+    {
+        logExt = "log";
+    }
+
+    std::string logname = fname + logExt;
+#ifndef PC
+        mLogFile.open(logname.c_str(), std::ios_base::out);
+#else
+        mLogFile.open(logname.c_str(), std::ios::out);
+#endif
+
     std::ifstream datafile;
     int numobjects = 0;
     double maxradius = 1;
@@ -51,6 +68,9 @@ bool ObjectMgr::Initialize(const std::string& fname)
         // runs=1e9
         // tstep=1
         // minvforcheck=1.0
+        // startdatasave=0
+        // nthdatasave=1
+
         char options[200];
         datafile.getline(options, 199);
 
@@ -58,11 +78,15 @@ bool ObjectMgr::Initialize(const std::string& fname)
         {
             // no Options line
             mOkay = false;
-            printf("Initialization failed - no Options line in file %s\n", fname.c_str());
+            std::string msg("Initialization failed - no Options line in file ");
+            msg += fname + "\n";
+            LogSimpleMessage(msg.c_str());
             datafile.close();
             return false;
         }
 
+        // record datafile info
+        LogSimpleMessage(options);
         char name[40];
         char val[40];
         char* opt = name;
@@ -175,7 +199,9 @@ bool ObjectMgr::Initialize(const std::string& fname)
                     pvz += vz * mass;
                 }
 
-                printf("Initialization completed.  %d particles read in\n", numobjects);
+                char msgbuf[80];
+                sprintf(msgbuf, "Initialization completed.  %d particles read in\n", numobjects);
+                LogSimpleMessage(msgbuf);
                 comx /= totmass;
                 comy /= totmass;
                 comz /= totmass;
@@ -229,12 +255,16 @@ bool ObjectMgr::Initialize(const std::string& fname)
                     double vpe = ctr ? 0 : ((x - comx) * vy + (comy - y) * vx) / rz2 * vz2;
                     double vpa = ctr ? 0 : ((comy - y) * vy + (comx - x) * vx) / rz2 * vz2;
 
-                    printf("Object %d, ideal orbital vel: \t%g; perpendicular: \t%g, parallel: \t%g\n",
+                    char msgbuf1[120];
+                    sprintf(msgbuf1, "Object %d, ideal orbital vel: \t%g; perpendicular: \t%g, parallel: \t%g\n",
                         obj->GetIndex(), orbitalVel, vpe, vpa);
+                    LogSimpleMessage(msgbuf1);
                 }
 
-                printf("Center of mass: \t%g, %g, %g\nMomentum: \t\t%g, %g, %g\nAngular momentum: \t%g, %g, %g\nMaxOrbitTime: %g\n", 
+                char msgbuf2[120];
+                sprintf(msgbuf2, "Center of mass: \t%g, %g, %g\nMomentum: \t\t%g, %g, %g\nAngular momentum: \t%g, %g, %g\nMaxOrbitTime: %g\n",
                     comx, comy, comz, pvx, pvy, pvz, angmx, angmy, angmz, mMaxOrbitTime);
+                LogSimpleMessage(msgbuf2);
                 okay = false;
                 continue;
             }
@@ -248,6 +278,11 @@ bool ObjectMgr::Initialize(const std::string& fname)
             double mass = 0;
             datafile >> x >> y >> z >> vx >> vy >> vz >> mass;
 
+            char msgbuf0[120];
+            sprintf(msgbuf0, "%g %g %g %g %g %g %g\n",
+                x, y, z, vx, vy, vz, mass);
+            LogSimpleMessage(msgbuf0);
+
             if (datafile.eof())
             {
                 continue;
@@ -256,7 +291,7 @@ bool ObjectMgr::Initialize(const std::string& fname)
             {
                 okay = false;
                 mOkay = false;
-                printf("Initialization failed.\n");
+                LogSimpleMessage("Initialization failed.\n");
             }
             else
             {
@@ -287,7 +322,7 @@ bool ObjectMgr::Initialize(const std::string& fname)
                     mYmin = y;
                 }
 
-                if (z > mZmin)
+                if (z < mZmin)
                 {
                     mZmin = z;
                 }
@@ -328,32 +363,34 @@ bool ObjectMgr::Initialize(const std::string& fname)
         diff = 4 * 32 * maxradius;
     }
 
-    mXmax = (mXmax + mXmin) / 2 + diff;
-    mXmin = (mXmax + mXmin) / 2 - diff;
-    mYmax = (mYmax + mYmin) / 2 + diff;
-    mYmin = (mYmax + mYmin) / 2 - diff;
-    mZmax = (mZmax + mZmin) / 2 + diff;
-    mZmin = (mZmax + mZmin) / 2 - diff;
+    mXmin = (mXmax + mXmin - diff) / 2;
+    mXmax = mXmin + diff;
+    mYmin = (mYmax + mYmin - diff) / 2;
+    mYmax = mYmin + diff;
+    mZmin = (mZmax + mZmin - diff) / 2;
+    mZmax = mZmin + diff;
 
-    printf("ObjectMgr::Initialize: Space: %g:%g, %g:%g, %g:%g\n",
+    char msgbuf3[120];
+    sprintf(msgbuf3, "ObjectMgr::Initialize: Space: %g:%g, %g:%g, %g:%g\n",
         mXmin, mXmax, mYmin, mYmax, mZmin, mZmax);
+    LogSimpleMessage(msgbuf3);
 
-    // set initial LocFlags
-    for (std::vector<Object*>::iterator oIt = mObjs.begin();
-        oIt != mObjs.end();
-        ++oIt)
-    {
-        Object* obj = *oIt;
-        obj->CalcLocFlags(mXmin, mXmax, mYmin, mYmax, mZmin, mZmax);
-        printf("ObjectMgr::Initialize: Setting locflags, object %d :  coarse flags %x, %x, %x, and half over: %x, %x, %x\n",
-            obj->GetIndex(),
-            obj->GetLocFlagsX().mCoarse,
-            obj->GetLocFlagsY().mCoarse,
-            obj->GetLocFlagsZ().mCoarse,
-            obj->GetLocFlags2X().mCoarse,
-            obj->GetLocFlags2Y().mCoarse,
-            obj->GetLocFlags2Z().mCoarse);
-    }
+    //// set initial LocFlags
+    //for (std::vector<Object*>::iterator oIt = mObjs.begin();
+    //    oIt != mObjs.end();
+    //    ++oIt)
+    //{
+    //    Object* obj = *oIt;
+    //    obj->CalcLocFlags(diff, mXmin, mYmin, mZmin);
+    //    printf("ObjectMgr::Initialize: Setting locflags, object %d :  coarse flags %x, %x, %x, and half over: %x, %x, %x\n",
+    //        obj->GetIndex(),
+    //        obj->GetLocFlagsX().mCoarse,
+    //        obj->GetLocFlagsY().mCoarse,
+    //        obj->GetLocFlagsZ().mCoarse,
+    //        obj->GetLocFlags2X().mCoarse,
+    //        obj->GetLocFlags2Y().mCoarse,
+    //        obj->GetLocFlags2Z().mCoarse);
+    //}
 
     return numobjects > 1;
 }
@@ -374,85 +411,34 @@ bool ObjectMgr::Run(void)
     {
         done = !done;
     }
-#if 0
-    // format for gnuplot
-    // concatenate files, changing number of lines (dup last line n times)
-    std::string catfile("orbits.dat");
-    std::ofstream datafile;
-#ifndef PC
-    datafile.open(catfile.c_str(), std::ios_base::out | std::ios_base::trunc);
-#else
-    datafile.open(catfile, std::ios::out | std::ios::trunc | std::ios::binary);
-#endif
-    //    char buf[256];
-    char lastbuf[256];
 
-    for (std::vector<Object*>::iterator oIt = mObjs.begin();
-        oIt != mObjs.end();
-        ++oIt)
+    // print/log the elapsed time
+    int hrs = 0;
+    int mins = 0;
+    int secs = 0;
+    time_t endTime = mStartTime;
+    time(&endTime);
+    double elapsed = difftime(endTime, mStartTime);
+
+    while (elapsed > 3600)
     {
-        Object* obj = *oIt;
-        int index = obj->GetIndex();
-
-        std::ofstream* ofile = obj->GetOFile();
-        ofile->close();
-        std::string ofname = obj->GetOFileName();
-        std::ifstream ifile;
-
-#ifndef PC
-        ifile.open(ofname.c_str(), std::ios_base::in);
-#else
-        ifile.open(ofname, std::ios::in | std::ios::binary);
-#endif
-
-        int endlen = 0;
-        char lastline[12];
-        char* buf2 = new char[kBufLength];
-        assert(sizeof(lastline) == 3 * sizeof(float) + endlen);
-        int totread = 0;
-
-        while (!ifile.fail())
-        {
-            ifile.read(buf2, kBufLength);
-            int numread = ifile.gcount();
-            totread += numread;
-
-            if (numread)
-            {
-                datafile.write(buf2, numread);
-
-                // set up lastline to duplicate
-                float* fbuf = (float*)lastline;
-                int numlines = numread / (3 * sizeof(float) + endlen);
-                float* fbuf2 = (float*)buf2 + (numlines - (3 * sizeof(float) + endlen));
-
-                for (int i = 0; i < 3; ++i)
-                {
-                    fbuf[i] = fbuf2[i];
-                }
-            }
-            else
-            {
-                printf("finished cat for index %d, totread = %d\n", index, totread);
-                break;
-            }
-        }
-
-        delete[] buf2;
-        ifile.close();
-
-        // repeat last line index times to make each dataset different (not topological contours for gnuplot)
-        for (int j = 0; j < index; ++j)
-        {
-            datafile.write(lastline, sizeof(lastline));
-        }
-
-        // add blank line
-        datafile << std::endl;
+        elapsed -= 3600;
+        hrs++;
     }
 
-    datafile.close();
-#endif
+    while (elapsed > 60)
+    {
+        elapsed -= 60;
+        mins++;
+    }
+
+    char msgbuf[80];
+    sprintf(msgbuf, "\nElapsed time: %d hrs, %d mins, %g secs",
+        hrs, mins, elapsed);
+    LogSimpleMessage(msgbuf);
+
+    mLogFile.close();
+
     // pause
 //    getchar();
     return true;
@@ -463,6 +449,8 @@ bool ObjectMgr::CalcStep(bool done)
 {
     // running total (which may roll over) of steps, for saving data
     static unsigned int stepnum = 0;
+    // count dots printed, use to output fractions occasionally
+    static unsigned int dotnum = 0;
 
     // record collisions
     std::vector<CollisionData> collisions;
@@ -545,10 +533,11 @@ bool ObjectMgr::CalcStep(bool done)
         {
             // process deltaVs and commit only if not involved in a collision
             obj->ProcessDeltaVs(mTStep);
-            obj->CommitTimeStepData(true);
+            obj->CommitTimeStepData();
+            obj->ClearCurrentData();
         }
 
-        obj->CalcLocFlags(mXmin, mXmax, mYmin, mYmax, mZmin, mZmax);
+        obj->CalcLocFlags(mXmax - mXmin, mXmin, mYmin, mZmin);
 
         // start writing data after optional kStartDataSave, defaulting to 0
         if ((mTStop - mTEnd) > kStartDataSave)
@@ -566,6 +555,21 @@ bool ObjectMgr::CalcStep(bool done)
 
     if (mPrint >= mTStop / 80)
     {
+        dotnum++;
+
+        if ((dotnum % 8) == 0)
+        {
+            // can't use LogSimpleMessage due to % in msg
+            char msgbuf[120];
+            sprintf(msgbuf, "  %d%%  ", (dotnum * 10) / 8);
+            printf("  %d%%  ", (dotnum * 10) / 8);
+
+            if (mLogFile.is_open())
+            {
+                mLogFile << msgbuf;
+            }
+        }
+
         printf(".");
         mPrint = 0;
     }
@@ -634,16 +638,16 @@ void ObjectMgr::ProcessCollisions(std::vector<CollisionData>& collisions)
             // if very close to actual collision, examine in detail
             if (dist < (tol * rad2))
             {
-                printf("ProcessCollisions:  Distance between ID %d and ID %d is %g (radius both = %g), time %g\n",
+                char msgbuf[120];
+                sprintf(msgbuf, "\nProcessCollisions:  Distance between ID %d and ID %d is %g (radius both = %g), time %g",
                     obj0->GetIndex(), obj1->GetIndex(), dist - rad2, rad2, mTStop - mTEnd);
+                LogSimpleMessage(msgbuf);
 
                 // distance is less than combined radii between the objects
                 // need to mark as collision, not just close approach
                 // keep going through data to accumulate objects in multiGp
-//                // but don't need to process further here
                 // and find appropriate tsFactor
                 rollback = true;
-//                continue;
             }
 
             // calc approach velocity - will need it
@@ -678,37 +682,10 @@ void ObjectMgr::ProcessCollisions(std::vector<CollisionData>& collisions)
 
         double tstep = mTStep / tsFactor;
 
+        // process all objects in this group using ministeps
         for (int i = 0; i < tsFactor; ++i)
         {
-            // this puts fractional dvs in list of deltas
-//            CalcStepForMultiObjects(*mIt, tstep);
-
-            // set of indices for Objects that have collided and for which 
-            // we've already determined new locations and velocities
-//            std::set<int> collidedObjs;
-
-//            if (rollback)
-//            {
-                // if collision happens in this ministep, Objects are added to collidedObjs
-                // their locations and velocities are calculated and committed - for this ministep 
-                CalcCollision(*mIt, tstep, tsFactor);
-//            }
-
-            //for (std::set<Object*>::iterator gIt = multiGp.begin();
-            //    gIt != multiGp.end();
-            //    ++gIt)
-            //{
-            //    std::set<int>::iterator cIt = collidedObjs.find((*gIt)->GetIndex());
-
-            //    if (cIt != collidedObjs.end())
-            //    {
-            //        continue;
-            //    }
-
-            //    // and apply the calcs to location and velocity at each ministep
-            //    (*gIt)->ProcessFractionalDeltaVs(multiGp, tstep, tsFactor);
-            //    (*gIt)->CommitTimeStepData(false);
-            //}
+            CalcCollision(*mIt, tstep, tsFactor);
         }
     }
 }
@@ -892,8 +869,6 @@ void ObjectMgr::CalcCollision(std::vector<CollisionData>& multicolls, double tst
                 hasCollision = true;
                 // calculate impact data:
                 //   want ctr-ctr angle wrt each trajectory
-//                collidedObjs.insert(obj0->GetIndex());
-//                collidedObjs.insert(obj1->GetIndex());
                 mIt->mDist = dist;
                 mIt->mTimeToCollision = proximityTime;
 
@@ -921,7 +896,7 @@ void ObjectMgr::CalcCollision(std::vector<CollisionData>& multicolls, double tst
                 assert((tstep - minCollisionTime) > 0);
                 double factor = tsfactor * tstep / (tstep - minCollisionTime);
                 (*gIt)->ProcessFractionalDeltaVs(objs, minCollisionTime, factor);
-                (*gIt)->CommitTimeStepData(false);
+                (*gIt)->CommitTimeStepData();
             }
 
             timeleft -= minCollisionTime;
@@ -984,8 +959,10 @@ void ObjectMgr::CalcCollision(std::vector<CollisionData>& multicolls, double tst
                     tsd1.mVx = vx1 + m1factor * dot * dx / rad2;
                     tsd1.mVy = vy1 + m1factor * dot * dy / rad2;
                     tsd1.mVz = vz1 + m1factor * dot * dz / rad2;
-                    printf("CalcCollision:  Objects %d and %d have collided\n",
+                    char msgbuf[120];
+                    sprintf(msgbuf, "\nCalcCollision:  Objects %d and %d have collided",
                         obj0->GetIndex(), obj1->GetIndex());
+                    LogSimpleMessage(msgbuf);
                 }
             }
         }
@@ -999,10 +976,20 @@ void ObjectMgr::CalcCollision(std::vector<CollisionData>& multicolls, double tst
             {
                 // and apply the calcs to location and velocity at each ministep
                 (*gIt)->ProcessFractionalDeltaVs(objs, timeleft, tsfactor);
-                (*gIt)->CommitTimeStepData(false);
+                (*gIt)->CommitTimeStepData();
             }
 
             timeleft = 0;
         }
     }
+}
+
+void ObjectMgr::LogSimpleMessage(const char* msg)
+{
+    if (mLogFile.is_open())
+    {
+        mLogFile << msg;
+    }
+
+    printf(msg);
 }

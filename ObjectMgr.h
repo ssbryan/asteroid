@@ -58,8 +58,10 @@ public:
     double  GetStepTime(void) const;
     void    GetRunTimeData(double& tstop, double& tend) const;
     void    ProcessCollisions(std::vector<CollisionData>& collisions);
+    void    LogSimpleMessage(const char* msg);
 
 private:
+    std::ofstream   mLogFile;
     bool    mOkay;
     double  mTStep;
     double  mTEnd;
@@ -75,6 +77,9 @@ private:
     double  mYmin;
     double  mZmax;
     double  mZmin;
+
+    // time
+    time_t  mStartTime;
 };
 
 inline ObjectMgr::~ObjectMgr(void)

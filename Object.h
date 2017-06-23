@@ -134,7 +134,8 @@ public:
     void    SetDone(Object* obj, bool done);
     int     GetIndex(void);
     double  GetRadius() const;
-    void    CommitTimeStepData(bool cleardata);
+    void    CommitTimeStepData(void);
+    void    ClearCurrentData(void);
 
     // write out position info for one timestep
     bool    WriteStep(const ObjectMgr* mgr, bool last);
@@ -145,9 +146,7 @@ public:
     void    RemoveDeltaVandInitialize(Object* obj);
     void    ProcessDeltaVs(double timestep);
     void    ProcessFractionalDeltaVs(std::set<Object*>& multiGp, double timestep, double factor);
-    bool    CalcLocFlags(double xmin, double xmax,
-                         double ymin, double ymax,
-                         double zmin, double zmax);
+    bool    CalcLocFlags(double coarse, double xmin, double ymin, double zmin);
     bool    IntersectsInTimestep(Object* obj, 
                                  double& proximityTime,
                                  double& dist,
@@ -272,19 +271,15 @@ inline double Object::GetRadius() const
     return mRadius;
 }
 
-inline void Object::CommitTimeStepData(bool cleardata)
+inline void Object::CommitTimeStepData()
 {
-    if (cleardata)
-    {
-        mCurrent.mDeltaV.clear();
-    }
-    assert((mIndex == 0) || (mCurrent.mLoc[0] != 0));
     mCommitted = mCurrent;
+}
 
-    if (cleardata)
-    {
-        mCurrent.ClearData();
-    }
+inline void Object::ClearCurrentData()
+{
+    mCurrent.mDeltaV.clear();
+    mCurrent.ClearData();
 }
 
 inline TimeStepData& Object::GetCommitted(void)

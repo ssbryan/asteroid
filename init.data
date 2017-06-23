@@ -1,4 +1,4 @@
-Options: momtol = 2e-2, dvnormtol = 2e-2, runs = 1.0e9, tstep = 1.0, minvforcheck = 0.01, startdatasave=2e6, nthdatasave=1024
+Options: momtol = 1e-2, dvnormtol = 1e-2, runs = 1.0e9, tstep = 1.0, minvforcheck = 0.01, startdatasave=2e6, nthdatasave=1024
 0.0 0.0 0.0 0.0 0.0 0.0 1.0e11
 -1000.0 0.0 0.0 0.0 -0.0817 0.0 1.0e5
 1000.0 0.0 0.0 0.0 0.0817 0.0 1.0e5

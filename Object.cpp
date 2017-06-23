@@ -93,53 +93,35 @@ bool Object::WriteStep(const ObjectMgr* mgr, bool last)
 {
     if (mOfile.is_open())
     {
-        // save if time is less than orbitTime and we're saving this orbit,
-        // given that we're skipping 10 orbitTimes for every one we save
-//        double tstop = 0;
-//        double tend = 0;
-//        mgr->GetRunTimeData(tstop, tend);
-//        double orbitTime = mgr->GetOrbitTime();
-//        int norbits = (tstop - tend) / orbitTime;
-//        norbits %= maxskip;
+        // make sure we don't write too often
+        // just save up data until it reaches printSize
         int printSize = 10000;
 
-        // need to save when (norbits == 0)
-        // need to save and write when we reach (norbits == 1), then clear data
-//        if ((norbits == 0) || ((norbits == 1) && !mOutput.empty()) || last)
+        mOutput.push_back(OutputLoc(mCommitted.mLoc[0], mCommitted.mLoc[1], mCommitted.mLoc[2]));
+
+        // only write if we have a lot of data
+        if ((mOutput.size() > printSize) || last)
         {
-            mOutput.push_back(OutputLoc(mCommitted.mLoc[0], mCommitted.mLoc[1], mCommitted.mLoc[2]));
+            int buflen = 3 * mOutput.size() * sizeof(float);
+            char* buf = new char[buflen];
+            int len = 0;
 
-            // only write if we have a lot of data
-            if ((mOutput.size() > printSize) || last)
-//            if (last || (norbits == 1))
+            for (std::vector<OutputLoc>::iterator oIt = mOutput.begin();
+                oIt != mOutput.end();
+                ++oIt)
             {
-                double step = mgr->GetStepTime();
-                int buflen = 3 * mOutput.size() * sizeof(float);
-                char* buf = new char[buflen];
-                int len = 0;
-
-                for (std::vector<OutputLoc>::iterator oIt = mOutput.begin();
-                    oIt != mOutput.end();
-                    ++oIt)
-                {
-                    float* fbuf = (float*)(buf + len);
-                    fbuf[0] = oIt->mX;
-                    fbuf[1] = oIt->mY;
-                    fbuf[2] = oIt->mZ;
-                    len += 3 * sizeof(float);
-                }
-
-                if (last)
-                {
-                    printf("End of run\n");
-                }
-
-                // write the data to file and clear it from the container
-                mOfile.write(buf, len);
-                delete[] buf;
-                buf = 0;
-                mOutput.clear();
+                float* fbuf = (float*)(buf + len);
+                fbuf[0] = oIt->mX;
+                fbuf[1] = oIt->mY;
+                fbuf[2] = oIt->mZ;
+                len += 3 * sizeof(float);
             }
+
+            // write the data to file and clear it from the container
+            mOfile.write(buf, len);
+            delete[] buf;
+            buf = 0;
+            mOutput.clear();
         }
 
         return true;
@@ -277,11 +259,9 @@ void Object::ProcessFractionalDeltaVs(std::set<Object*>& multiGp, double timeste
     }
 }
 
-bool Object::CalcLocFlags(double xmin, double xmax,
-                          double ymin, double ymax,
-                          double zmin, double zmax)
+bool Object::CalcLocFlags(double coarse, double xmin, double ymin, double zmin)
 {
-    // object xyz valuea
+    // object xyz values
     // use these and offset to handle any cases where objects
     // are side by side but separated by a bit boundary
     double x = mCommitted.mLoc[0];
@@ -289,19 +269,7 @@ bool Object::CalcLocFlags(double xmin, double xmax,
     double z = mCommitted.mLoc[2];
 
     // divide space into 32 chunks each for coarse, mid and fine
-    double coarse = (xmax - xmin);
-
-    if ((ymax - ymin) > coarse)
-    {
-        coarse = (ymax - ymin);
-    }
-
-    if ((zmax - zmin) > coarse)
-    {
-        coarse = (zmax - zmin);
-    }
-
-    // divide coarse into 32 chunks for mid
+    // mid
     double mid = coarse / 32;
 
     // divide mid into 32 chunks for fine
@@ -336,229 +304,8 @@ bool Object::CalcLocFlags(double xmin, double xmax,
     mLocFlags2Y.mFine = 1 << (int)(((yo - (mLocFlags2Y.mCoarse * mid) - (mLocFlags2Y.mMid * fine)) / fine) * 32.0);
     mLocFlags2Z.mFine = 1 << (int)(((zo - (mLocFlags2Z.mCoarse * mid) - (mLocFlags2Z.mMid * fine)) / fine) * 32.0);
 
-    //printf("Setting locflags, object %d :  coarse flags %x, %x, %x, and half over: %x, %x, %x\n",
-    //    GetIndex(),
-    //    GetLocFlagsX().mCoarse,
-    //    GetLocFlagsY().mCoarse,
-    //    GetLocFlagsZ().mCoarse,
-    //    GetLocFlags2X().mCoarse,
-    //    GetLocFlags2Y().mCoarse,
-    //    GetLocFlags2Z().mCoarse);
-
     return true;
 }
-
-//bool Object::IntersectsInTimestep(Object* obj, 
-//                                  double timestep, 
-//                                  double& proximityTime0,
-//                                  double& proximityTime1,
-//                                  double& sqdist,
-//                                  double closeFactor,
-//                                  int currentTimestep)
-//{
-//    // if there's a locflags overlap, check distance between travel vectors
-//    if (((obj->mLocFlagsX.mCoarse & mLocFlagsX.mCoarse) ||
-//        (obj->mLocFlags2X.mCoarse & mLocFlags2X.mCoarse)) &&
-//        ((obj->mLocFlagsY.mCoarse & mLocFlagsY.mCoarse) ||
-//        (obj->mLocFlags2Y.mCoarse & mLocFlags2Y.mCoarse)) &&
-//        ((obj->mLocFlagsZ.mCoarse & mLocFlagsZ.mCoarse) ||
-//        (obj->mLocFlags2Z.mCoarse & mLocFlags2Z.mCoarse)))
-//    {
-////        printf("Flag overlap between ID %d and ID %d, num steps = %d\n", mIndex, obj->GetIndex(), currentTimestep);
-//        // check whether there's any proximity between the objects during this timestep
-//        double x3 = 0;
-//        double y3 = 0;
-//        double z3 = 0;
-//        double vx2 = 0;
-//        double vy2 = 0;
-//        double vz2 = 0;
-//
-//        obj->GetLocation(x3, y3, z3);
-//        obj->GetVelocity(vx2, vy2, vz2);
-//
-//        double x4 = x3 + (timestep * vx2);
-//        double y4 = y3 + (timestep * vy2);
-//        double z4 = z3 + (timestep * vz2);
-//
-//        double x1 = mCommitted.mLoc[0];
-//        double y1 = mCommitted.mLoc[1];
-//        double z1 = mCommitted.mLoc[2];
-//
-//        double x2 = x1 + (timestep * mCommitted.mVx);
-//        double y2 = y1 + (timestep * mCommitted.mVy);
-//        double z2 = z1 + (timestep * mCommitted.mVz);
-//
-//        double rad2 = obj->GetRadius();
-//
-//        // if we want to know precisely whether objects are colliding, use exact
-//        double bothrad = rad2 + mRadius;
-//
-//        // The following algorithm posted online without restriction by Paul Bourke, dated April 1998
-//        //
-//        // a line will be defined by two points lying on it, 
-//        // a point on line "a" defined by points P1 and P2 has an equation.
-//        //    Pa = P1 + mua(P2 - P1)
-//        // similarly a point on a second line "b" defined by points P4 and P4 will be written as
-//        //    Pb = P3 + mub(P4 - P3)
-//        //
-//        // The values of mua and mub range from negative to positive infinity.The line segments between P1 P2 and P3 P4 have their corresponding mu between 0 and 1.
-//        //
-//        // The shortest line segment between two 3D lines will be perpendicular to the two lines.
-//        // This allows us to write two equations for the dot product as
-//        //    (Pa - Pb) dot(P2 - P1) = 0
-//        //    (Pa - Pb) dot(P4 - P3) = 0
-//        // where Pa and Pb are the intersections of normals on the lines 
-//        //
-//        // Expanding these given the equation of the lines
-//        //    (P1 - P3 + mua(P2 - P1) - mub(P4 - P3)) dot(P2 - P1) = 0
-//        //    (P1 - P3 + mua(P2 - P1) - mub(P4 - P3)) dot(P4 - P3) = 0
-//        //
-//        //    Expanding these in terms of the coordinates(x, y, z) is a nightmare but the result is as follows
-//        //
-//        //    d1321 + mua d2121 - mub d4321 = 0
-//        //    d1343 + mua d4321 - mub d4343 = 0
-//        //
-//        // where
-//        //    dmnop = (xm - xn)(xo - xp) + (ym - yn)(yo - yp) + (zm - zn)(zo - zp)
-//        //    Note that dmnop = dopmn
-//        //
-//        //    Finally, solving for mua gives
-//        //
-//        //    mua = (d1343 d4321 - d1321 d4343) / (d2121 d4343 - d4321 d4321)
-//        //    and back - substituting gives mub
-//        //
-//        //    mub = (d1343 + mua d4321) / d4343
-//        // 
-//        double xd13 = (x1 - x3);
-//        double xd43 = (x4 - x3);
-//        double xd21 = (x2 - x1);
-//        double yd13 = (y1 - y3);
-//        double yd43 = (y4 - y3);
-//        double yd21 = (y2 - y1);
-//        double zd13 = (z1 - z3);
-//        double zd43 = (z4 - z3);
-//        double zd21 = (z2 - z1);
-//        double d1343 = xd13 * xd43 + yd13 * yd43 + zd13 * zd43;
-//        double d4321 = xd43 * xd21 + yd43 * yd21 + zd43 * zd21;
-//        double d1321 = xd13 * xd21 + yd13 * yd21 + zd13 * zd21;
-//        double d4343 = xd43 * xd43 + yd43 * yd43 + zd43 * zd43;
-//        double d2121 = xd21 * xd21 + yd21 * yd21 + zd21 * zd21;
-//        double mua = (d1343 * d4321 - d1321 * d4343) / (d2121 * d4343 - d4321 * d4321);
-//        double mub = (d1343 + mua * d4321) / d4343;
-//        double pax = x1 + mua * (x2 - x1);
-//        double pay = y1 + mua * (y2 - y1);
-//        double paz = z1 + mua * (z2 - z1);
-//
-//        // make sure point is not beyond line segment
-//        if (((pax < x1) && (x1 < x2)) || ((pax > x1) && (x1 > x2)))
-//        {
-//            pax = x1;
-//        }
-//        else if (((pax > x2) && (x1 < x2)) || ((pax < x2) && (x1 > x2)))
-//        {
-//            pax = x2;
-//        }
-//
-//        if (((pay < y1) && (y1 < y2)) || ((pay > y1) && (y1 > y2)))
-//        {
-//            pay = y1;
-//        }
-//        else if (((pay > y2) && (y1 < y2)) || ((pay < y2) && (y1 > y2)))
-//        {
-//            pay = y2;
-//        }
-//
-//        if (((paz < z1) && (z1 < z2)) || ((paz > z1) && (z1 > z2)))
-//        {
-//            paz = z1;
-//        }
-//        else if (((paz > z2) && (z1 < z2)) || ((paz < z2) && (z1 > z2)))
-//        {
-//            paz = z2;
-//        }
-//
-//        double pbx = x3 + mub * (x4 - x3);
-//        double pby = y3 + mub * (y4 - y3);
-//        double pbz = z3 + mub * (z4 - z3);
-//
-//        // make sure other point is not beyond line segment
-//        if (((pbx < x3) && (x3 < x4)) || ((pbx > x3) && (x3 > x4)))
-//        {
-//            pbx = x3;
-//        }
-//        else if (((pbx > x4) && (x3 < x4)) || ((pbx < x4) && (x3 > x4)))
-//        {
-//            pbx = x4;
-//        }
-//
-//        if (((pby < y3) && (y3 < y4)) || ((pby > y3) && (y3 > y4)))
-//        {
-//            pby = y3;
-//        }
-//        else if (((pby > y4) && (y3 < y4)) || ((pby < y4) && (y3 > y4)))
-//        {
-//            pby = y4;
-//        }
-//
-//        if (((pbz < z3) && (z3 < z4)) || ((pbz > z3) && (z3 > z4)))
-//        {
-//            pbz = z3;
-//        }
-//        else if (((pbz > z4) && (z3 < z4)) || ((pbz < z4) && (z3 > z4)))
-//        {
-//            pbz = z4;
-//        }
-//
-//        double xab = pax - pbx;
-//        double yab = pay - pby;
-//        double zab = paz - pbz;
-//        double rsq = (xab * xab) + (yab * yab) + (zab * zab);
-//        sqdist = rsq;
-//
-//        // check whether the distance between the traversal vectors is less than 
-//        // the combined radii (or twice that if "exact" not specified)
-//        if (rsq < (bothrad * bothrad * closeFactor * closeFactor))
-//        {
-//            // calculate the times of closest approach
-//            proximityTime0 = abs((pax - x1) / mCommitted.mVx);
-//            double pty = abs((pay - y1) / mCommitted.mVy);
-//            double ptz = abs((paz - z1) / mCommitted.mVz);
-//
-//            if (pty > proximityTime0)
-//            {
-//                proximityTime0 = pty;
-//            }
-//
-//            if (ptz > proximityTime0)
-//            {
-//                proximityTime0 = ptz;
-//            }
-//
-//            proximityTime1 = abs((pbx - x3) / vx2);
-//
-//            double pty1 = abs((pby - y3) / vy2);
-//            double ptz1 = abs((pbz - z3) / vz2);
-//
-//            if (pty1 > proximityTime1)
-//            {
-//                proximityTime1 = pty1;
-//            }
-//
-//            if (ptz1 > proximityTime1)
-//            {
-//                proximityTime1 = ptz1;
-//            }
-//
-//            return true;
-//        }
-//    }
-//    else
-//    {
-////        printf("Skipping distance check for ID %d and ID %d\n", mIndex, obj->GetIndex());
-//    }
-//
-//    return false;
-//}
 
 void Object::RemoveDeltaVandInitialize(Object* obj)
 {
