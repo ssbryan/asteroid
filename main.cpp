@@ -18,7 +18,7 @@ int main(int argc, char* argv[])
         {
             printf("Usage:  asteroid [filename]\n");
             printf("\tFile format:\n");
-            printf("\t\tOptions: [momtol = 0.01, ] [dvnormtol = 0.01, ] [runs = 1e6, ] [tstep = 1.0, ] [minvforcheck = 0.01, ] [startdatasave = 0.0, ] [nthdatasave = 1]\n");
+            printf("\t\tOptions: [momtol = 0.0001, ] [dvnormtol = 0.00001, ] [runs = 1e6, ] [tstep = 1.0, ] [minvforcheck = 0.001, ] [startdatasave = 0.0, ] [nthdatasave = 1]\n");
             printf("\t\t<Object data>*\n");
             printf("\t\t<Object data>: xloc yloc zloc xvel yvel zvel mass [all doubles, as many objects, each on its own line, as desired]\n");
             printf("\tExample:\n");

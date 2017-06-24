@@ -16,13 +16,11 @@
 // June 22, 2017
 
 // tolerance values set in Options line
-double kMinVforDVCheck = 0.01;
-double kMaxDVChange = 0.01;
-double kMaxDVNormalChange = 0.01;
+double kMinVforDVCheck = 0.001;
+double kMaxDVChange = 0.0001;
+double kMaxDVNormalChange = 0.00001;
 double kStartDataSave = 0;
 unsigned int kNthDataSave = 1;
-
-const int maxskip = 10;
 
 
 Object::Object(float x, float y, float z, double vx, double vy, double vz, double mass, int index)
@@ -461,7 +459,7 @@ double Object::CheckTimestepCriteria(void) const
     // 1 - rate of momentum change
     //    calculate |dv|^2 / |v|^2 (unless v is close to 0), use as a criterion
     // 2 - rate of force angle change as a proportion of velocity
-    //    calculate |v|^2 - (dv dot v)^2 / |v|^2 = dv(normal)^2
+    //    calculate |dv|^2 - (dv dot v)^2 / |v|^2 = dv(normal)^2
     //    use dv(normal)^2 / |v|^2 as a criterion
 
     double magV2 = mCommitted.MagV2();
@@ -484,7 +482,7 @@ double Object::CheckTimestepCriteria(void) const
     }
 
     double dot = dvx * mCommitted.mVx + dvy * mCommitted.mVy + dvz * mCommitted.mVz;
-    double dnorm = abs(1 - dot * dot / (magV2 * magV2));
+    double dnorm = abs(magDV2 / magV2 - dot * dot / (magV2 * magV2));
 
     if (dnorm > (kMaxDVNormalChange * kMaxDVNormalChange))
     {

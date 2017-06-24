@@ -14,6 +14,7 @@ void FindCollisionGroups(std::vector<CollisionData>& collisions, std::vector<std
 ObjectMgr::ObjectMgr(const std::string& fname)
     : mTEnd(1e6)
     , mTStep(1)
+    , mTStepOriginal(1)
     , mTStop(1e6)
     , mPrint(0)
     , mMaxOrbitTime(1)
@@ -58,6 +59,10 @@ bool ObjectMgr::Initialize(const std::string& fname)
     datafile.open(fname, std::ios::in | std::ios::binary);
 #endif
 
+    char msgbuf4[80];
+    sprintf(msgbuf4, "Initialize:  Reading data file %s\n", fname.c_str());
+    LogSimpleMessage(msgbuf4);
+
     if (datafile.is_open())
     {
         bool okay = true;
@@ -78,7 +83,7 @@ bool ObjectMgr::Initialize(const std::string& fname)
         {
             // no Options line
             mOkay = false;
-            std::string msg("Initialization failed - no Options line in file ");
+            std::string msg("Initialize:  Initialization failed - no Options line in file ");
             msg += fname + "\n";
             LogSimpleMessage(msg.c_str());
             datafile.close();
@@ -121,6 +126,7 @@ bool ObjectMgr::Initialize(const std::string& fname)
                 else if (!stricmp(name, "tstep"))
                 {
                     mTStep = strtod(val, &endptr);
+                    mTStepOriginal = mTStep;
                 }
                 else if (!stricmp(name, "minvforcheck"))
                 {
@@ -200,7 +206,7 @@ bool ObjectMgr::Initialize(const std::string& fname)
                 }
 
                 char msgbuf[80];
-                sprintf(msgbuf, "Initialization completed.  %d particles read in\n", numobjects);
+                sprintf(msgbuf, "Initialize:  Initialization completed.  %d particles read in\n", numobjects);
                 LogSimpleMessage(msgbuf);
                 comx /= totmass;
                 comy /= totmass;
@@ -256,13 +262,13 @@ bool ObjectMgr::Initialize(const std::string& fname)
                     double vpa = ctr ? 0 : ((comy - y) * vy + (comx - x) * vx) / rz2 * vz2;
 
                     char msgbuf1[120];
-                    sprintf(msgbuf1, "Object %d, ideal orbital vel: \t%g; perpendicular: \t%g, parallel: \t%g\n",
+                    sprintf(msgbuf1, "Initialize:  Object %d, ideal orbital vel: \t%g; perpendicular: \t%g, parallel: \t%g\n",
                         obj->GetIndex(), orbitalVel, vpe, vpa);
                     LogSimpleMessage(msgbuf1);
                 }
 
                 char msgbuf2[120];
-                sprintf(msgbuf2, "Center of mass: \t%g, %g, %g\nMomentum: \t\t%g, %g, %g\nAngular momentum: \t%g, %g, %g\nMaxOrbitTime: %g\n",
+                sprintf(msgbuf2, "Initialize:  Center of mass: \t%g, %g, %g\nMomentum: \t\t%g, %g, %g\nAngular momentum: \t%g, %g, %g\nMaxOrbitTime: %g\n",
                     comx, comy, comz, pvx, pvy, pvz, angmx, angmy, angmz, mMaxOrbitTime);
                 LogSimpleMessage(msgbuf2);
                 okay = false;
@@ -291,7 +297,7 @@ bool ObjectMgr::Initialize(const std::string& fname)
             {
                 okay = false;
                 mOkay = false;
-                LogSimpleMessage("Initialization failed.\n");
+                LogSimpleMessage("Initialize:  Initialization failed.\n");
             }
             else
             {
@@ -371,7 +377,7 @@ bool ObjectMgr::Initialize(const std::string& fname)
     mZmax = mZmin + diff;
 
     char msgbuf3[120];
-    sprintf(msgbuf3, "ObjectMgr::Initialize: Space: %g:%g, %g:%g, %g:%g\n",
+    sprintf(msgbuf3, "Initialize: Space extents: %g : %g, %g : %g, %g : %g\n",
         mXmin, mXmax, mYmin, mYmax, mZmin, mZmax);
     LogSimpleMessage(msgbuf3);
 
@@ -433,7 +439,7 @@ bool ObjectMgr::Run(void)
     }
 
     char msgbuf[80];
-    sprintf(msgbuf, "\nElapsed time: %d hrs, %d mins, %g secs",
+    sprintf(msgbuf, "\nRun:  Elapsed time: %d hrs, %d mins, %g secs",
         hrs, mins, elapsed);
     LogSimpleMessage(msgbuf);
 
@@ -451,6 +457,98 @@ bool ObjectMgr::CalcStep(bool done)
     static unsigned int stepnum = 0;
     // count dots printed, use to output fractions occasionally
     static unsigned int dotnum = 0;
+
+    // at the first step, run through once and caculate deltaVs
+    // then get appropriate tsFactor, reset timestep, reset deltaVs, and begin for real
+    if (stepnum == 0)
+    {
+        double tsFactor = 1;
+
+        // first, calculate deltaVs fpr all objects
+        for (std::vector<Object*>::iterator oIt = mObjs.begin();
+            oIt != mObjs.end();
+            ++oIt)
+        {
+            Object* obj = *oIt;
+
+            for (std::vector<Object*>::iterator oIt2 = mObjs.begin();
+                oIt2 != mObjs.end();
+                ++oIt2)
+            {
+                Object* obj2 = *oIt2;
+
+                if (obj == obj2)
+                {
+                    continue;
+                }
+
+                if (obj->IsDone(obj2, done))
+                {
+                    continue;
+                }
+
+                std::vector<CollisionData> multicolls;
+                CollisionData cd(obj, obj2);
+                multicolls.push_back(cd);
+
+                CalcStepForMultiObjects(multicolls, mTStep);
+                obj->SetDone(obj2, done);
+                obj2->SetDone(obj, done);
+            }
+        }
+
+        // then check constraints to get adjusted timestep
+        for (std::vector<Object*>::iterator oIt = mObjs.begin();
+            oIt != mObjs.end();
+            ++oIt)
+        {
+            Object* obj = *oIt;
+            double tsFactorTmp = obj->CheckTimestepCriteria();
+
+            if (tsFactorTmp > tsFactor)
+            {
+                tsFactor = tsFactorTmp;
+            }
+        }
+
+        // then reset deltaVs and done flags
+        for (std::vector<Object*>::iterator oIt = mObjs.begin();
+            oIt != mObjs.end();
+            ++oIt)
+        {
+            Object* obj = *oIt;
+            obj->ClearCurrentData();
+
+            for (std::vector<Object*>::iterator oIt2 = mObjs.begin();
+                oIt2 != mObjs.end();
+                ++oIt2)
+            {
+                Object* obj2 = *oIt2;
+
+                if (obj == obj2)
+                {
+                    continue;
+                }
+
+                if (obj->IsDone(obj2, !done))
+                {
+                    continue;
+                }
+
+                obj->SetDone(obj2, !done);
+                obj2->SetDone(obj, !done);
+            }
+        }
+
+        if (tsFactor > 1)
+        {
+            mTStep = mTStep / tsFactor;
+
+            char msgbuf1[120];
+            sprintf(msgbuf1, "\nCalcStep:  Initial calulation: TimeStep reset from %g to %g\n", mTStepOriginal, mTStep);
+            LogSimpleMessage(msgbuf1);
+        }
+    }
 
     // record collisions
     std::vector<CollisionData> collisions;
@@ -657,7 +755,7 @@ void ObjectMgr::ProcessCollisions(std::vector<CollisionData>& collisions)
             // 1 - rate of momentum change
             //    calculate |dv|^2 / |v|^2 (unless v is close to 0), use as a criterion
             // 2 - rate of force angle change as a proportion of velocity
-            //    calculate |v|^2 - (dv dot v)^2 / |v|^2 = dv(normal)^2
+            //    calculate |dv|^2 - (dv dot v)^2 / |v|^2 = dv(normal)^2
             //    use dv(normal)^2 / |v|^2 as a criterion
             double tsFactorTmp = obj0->CheckTimestepCriteria();
 
@@ -682,10 +780,24 @@ void ObjectMgr::ProcessCollisions(std::vector<CollisionData>& collisions)
 
         double tstep = mTStep / tsFactor;
 
+        if (tsFactor > 1)
+        {
+            char msgbuf1[120];
+            sprintf(msgbuf1, "\nProcessCollisions:  Temporarily set tstep to %g", tstep);
+            LogSimpleMessage(msgbuf1);
+        }
+
         // process all objects in this group using ministeps
         for (int i = 0; i < tsFactor; ++i)
         {
             CalcCollision(*mIt, tstep, tsFactor);
+        }
+
+        if (tsFactor > 1)
+        {
+            char msgbuf1[120];
+            sprintf(msgbuf1, "\nProcessCollisions:   ... and tstep is back to %g", mTStep);
+            LogSimpleMessage(msgbuf1);
         }
     }
 }

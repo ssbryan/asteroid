@@ -63,6 +63,7 @@ public:
 private:
     std::ofstream   mLogFile;
     bool    mOkay;
+    double  mTStepOriginal;
     double  mTStep;
     double  mTEnd;
     double  mTStop;

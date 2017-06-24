@@ -16,7 +16,7 @@ If filename is not specified, "init.data" is looked for
 
 Format of data file:
 
-Options: [momtol = 2e-2,] [dvnormtol = 2e-2,] [runs = 1.0e9,] [tstep = 1.0,] [minvforcheck = 0.01,] [startdatasave=2e6,] [nthdatasave=1024]
+Options: [momtol = 1e-4,] [dvnormtol = 1e-5,] [runs = 1.0e6,] [tstep = 1.0,] [minvforcheck = 0.001,] [startdatasave=0,] [nthdatasave=1]
 <Object data>*
 
 All options are optional.  General format is 
@@ -24,11 +24,11 @@ All options are optional.  General format is
 with a final comma unnecessary.  Whitespace is ignored, the equals sign and commas as separators are required.
 
 Current options and defaults are:
-  momtol = 0.01 (max momentum change before timestep will be shortened)
-  dvnormtol = 0.01 (max momentum change in the normal diection before timestep will be shortened)
+  momtol = 0.0001 (max momentum change before timestep will be shortened)
+  dvnormtol = 0.00001 (max momentum change in the normal diection before timestep will be shortened)
   runs = 1.0e6 (number of nominal timesteps)
   tstep = 1.0 (nominal timestep)
-  minvforcheck = 0.01 (minimum velocity below which momentum constraint momtol will not be checked)
+  minvforcheck = 0.001 (minimum velocity below which momentum constraint momtol will not be checked)
   startdatasave=0 (specify the time to start saving data - used to ignore behavior before collisions)
   nthdatasave=1 (save only every Nth data point)
 
