@@ -6,3 +6,4 @@ x64/Release/**
 *.opendb
 .vs/asteroid/v14/.suo
 *.log
+*.txt
