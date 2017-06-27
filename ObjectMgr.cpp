@@ -92,6 +92,7 @@ bool ObjectMgr::Initialize(const std::string& fname)
 
         // record datafile info
         LogSimpleMessage(options);
+        LogSimpleMessage("\n");
         char name[40];
         char val[40];
         char* opt = name;
